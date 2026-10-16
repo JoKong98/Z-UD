@@ -23,6 +23,10 @@ public class ReportNotificationService {
 		send(userId, ReportEventType.REPORT_COMPLETED, Map.of("consultationId", consultationId));
 	}
 
+	public void notifyReportFailed(final Long userId, final String consultationId) {
+		send(userId, ReportEventType.REPORT_FAILED, Map.of("consultationId", consultationId));
+	}
+
 	private void send(final Long userId, final ReportEventType eventType, final Object data) {
 		try {
 			notificationFacadeService.send(
