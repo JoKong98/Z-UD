@@ -61,10 +61,11 @@ public class GzipRedisSerializer<T> implements RedisSerializer<T> {
 
 	private byte[] compress(byte[] original) {
 		try (
-			ByteArrayOutputStream bos = new ByteArrayOutputStream(MIN_COMPRESS_SIZE);
-			GZIPOutputStream gos = new GZIPOutputStream(bos, MIN_COMPRESS_SIZE)
+			ByteArrayOutputStream bos = new ByteArrayOutputStream(BUFFER_SIZE);
+			GZIPOutputStream gos = new GZIPOutputStream(bos, BUFFER_SIZE)
 		) {
 			gos.write(original);
+			// (Why) finish()로 남은 deflate 블록과 트레일러(CRC32·ISIZE)를 기록해야 완결된 GZIP이 된다.
 			gos.finish();
 			return bos.toByteArray();
 		} catch (Exception _) {
@@ -75,9 +76,10 @@ public class GzipRedisSerializer<T> implements RedisSerializer<T> {
 	private byte[] decompress(byte[] encoded) {
 		try (
 			GZIPInputStream gis = new GZIPInputStream(new ByteArrayInputStream(encoded), BUFFER_SIZE);
-			RawBufferByteArrayOutputStream out = new RawBufferByteArrayOutputStream(BUFFER_SIZE)
+			ByteArrayOutputStream out = new ByteArrayOutputStream(BUFFER_SIZE)
 		) {
 			StreamUtils.copy(gis, out);
+			// (Why) 내부 버퍼를 그대로 돌려주면 유효 길이 뒤의 빈 바이트까지 넘어가 역직렬화가 실패한다.
 			return out.toByteArray();
 		} catch (Exception _) {
 			throw new BusinessException(ErrorCode.GZIP_DECOMPRESS_ERROR);
@@ -86,16 +88,5 @@ public class GzipRedisSerializer<T> implements RedisSerializer<T> {
 
 	private boolean isGzipCompressed(byte[] bytes) {
 		return bytes.length > 2 && bytes[0] == GZIP_MAGIC_BYTES[0] && bytes[1] == GZIP_MAGIC_BYTES[1];
-	}
-
-	static class RawBufferByteArrayOutputStream extends ByteArrayOutputStream {
-
-		public RawBufferByteArrayOutputStream(int size) {
-			super(size);
-		}
-
-		public byte[] getRawByteArray() {
-			return this.buf;
-		}
 	}
 }
