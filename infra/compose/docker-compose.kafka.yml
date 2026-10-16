@@ -53,6 +53,8 @@ services:
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:80 --create --if-not-exists --topic report-response --partitions 3 --replication-factor 1 &&
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:80 --create --if-not-exists --topic ocr-request --partitions 3 --replication-factor 1 &&
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:80 --create --if-not-exists --topic ocr-response --partitions 3 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:80 --create --if-not-exists --topic report-response-dlt --partitions 3 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:80 --create --if-not-exists --topic ocr-response-dlt --partitions 3 --replication-factor 1 &&
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:80 --create --if-not-exists --topic document-update --partitions 3 --replication-factor 1 &&      
       echo 'Topics created'
       "

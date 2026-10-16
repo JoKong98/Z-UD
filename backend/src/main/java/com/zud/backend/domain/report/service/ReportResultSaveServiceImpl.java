@@ -7,10 +7,12 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.zud.backend.common.error.ErrorCode;
+import com.zud.backend.common.kafka.InvalidKafkaMessageException;
 import com.zud.backend.domain.report.dto.message.LoanReportResMessage;
 import com.zud.backend.domain.report.exception.ReportException;
 import com.zud.backend.domain.report.redis.LoanReportResultCache;
@@ -36,20 +38,14 @@ public class ReportResultSaveServiceImpl implements ReportResultSaveService {
 	@Override
 	@Transactional
 	public void saveReportResult(String messageBody) {
+		log.info("[Report] Kafka 응답 처리 시작");
+		// (Why) 메시지 자체가 잘못된 경우는 재시도해도 결과가 같으므로 처리 전에 걸러 곧바로 DLT로 보낸다.
+		JsonNode root = parseTree(messageBody);
+		String consultationId = extractConsultationId(root);
+		LoanReportResMessage message = parseMessage(messageBody);
+		log.info("[Report] Kafka 응답 consultationId 파싱 완료: consultationId={}", consultationId);
+
 		try {
-			log.info("[Report] Kafka 응답 처리 시작");
-			JsonNode root = objectMapper.readTree(messageBody);
-
-			JsonNode consultationIdNode = root.path("consultationId");
-			if (consultationIdNode.isMissingNode() || consultationIdNode.isNull()) {
-				throw new ReportException(ErrorCode.REPORT_UUID_NOT_FOUND);
-			}
-
-			String consultationId = consultationIdNode.asText();
-			log.info("[Report] Kafka 응답 consultationId 파싱 완료: consultationId={}", consultationId);
-
-			LoanReportResMessage message = objectMapper.readValue(messageBody, LoanReportResMessage.class);
-
 			LoanReportResultCache existing = reportRedisRepository.findByConsultationId(consultationId)
 				.orElseThrow(() -> new ReportException(ErrorCode.REPORT_REQUEST_NOT_FOUND));
 
@@ -68,6 +64,36 @@ public class ReportResultSaveServiceImpl implements ReportResultSaveService {
 			throw new ReportException(ErrorCode.REPORT_RESULT_PROCESSING_FAILED);
 		}
 
+	}
+
+	private JsonNode parseTree(String messageBody) {
+		if (messageBody == null || messageBody.isBlank()) {
+			throw new InvalidKafkaMessageException(ErrorCode.DESERIALIZE_ERROR);
+		}
+		try {
+			return objectMapper.readTree(messageBody);
+		} catch (JsonProcessingException ex) {
+			log.warn("[Report] Kafka 응답 JSON 파싱 실패");
+			throw new InvalidKafkaMessageException(ErrorCode.DESERIALIZE_ERROR, ex);
+		}
+	}
+
+	private String extractConsultationId(JsonNode root) {
+		JsonNode consultationIdNode = root.path("consultationId");
+		if (consultationIdNode.isMissingNode() || consultationIdNode.isNull()) {
+			log.warn("[Report] Kafka 응답에 consultationId 없음");
+			throw new InvalidKafkaMessageException(ErrorCode.REPORT_UUID_NOT_FOUND);
+		}
+		return consultationIdNode.asText();
+	}
+
+	private LoanReportResMessage parseMessage(String messageBody) {
+		try {
+			return objectMapper.readValue(messageBody, LoanReportResMessage.class);
+		} catch (JsonProcessingException ex) {
+			log.warn("[Report] Kafka 응답 메시지 매핑 실패");
+			throw new InvalidKafkaMessageException(ErrorCode.DESERIALIZE_ERROR, ex);
+		}
 	}
 
 	private String buildPayloadToStore(JsonNode root, String messageBody) {
