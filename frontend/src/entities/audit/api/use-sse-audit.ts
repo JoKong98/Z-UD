@@ -200,6 +200,13 @@ export const useSseAudit = (consultationId: string | undefined, isTriggered: boo
       console.log('[SSE] REPORT_COMPLETED received');
       handleReportCompleted();
     });
+    // (Why) 백엔드가 재시도를 모두 소진하면 REPORT_FAILED를 보낸다. 받지 않으면 화면이 계속 대기 상태로 남는다.
+    eventSource.addEventListener('REPORT_FAILED', () => {
+      dispatch(updateStepStatus({ step: 'report', status: 'ERROR', message: '리포트 생성 실패' }));
+      dispatch(addErrorMessage('최종 리포트 생성에 실패했습니다. 다시 시도해 주세요.'));
+      eventSource.close();
+      dispatch(setSseConnected(false));
+    });
 
     // ─── 에러 처리 ───
     eventSource.onerror = (error) => {
